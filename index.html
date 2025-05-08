@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Highspell Multi-Window Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            overflow: hidden;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            grid-gap: 2px;
+            padding: 0;
+            width: 100%;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        @media (max-width: 1200px) {
+            .container { grid-template-columns: repeat(4, 1fr); }
+        }
+        @media (max-width: 800px) {
+            .container { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 500px) {
+            .container { grid-template-columns: 1fr; }
+        }
+        .iframe-container {
+            position: relative;
+            height: 100%;
+            border: none;
+            border-radius: 0;
+            overflow: hidden;
+            box-shadow: none;
+            background: white;
+            z-index: 1;
+        }
+        iframe {
+            width: 100%;
+            height: calc(100% - 30px);
+            border: none;
+            position: relative;
+            top: 0;
+            left: 0;
+        }
+        .controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 30px;
+            background: #f0f0f0;
+            display: none;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 5px;
+            box-sizing: border-box;
+            border-top: 1px solid #ddd;
+        }
+        .controls button {
+            font-size: 11px;
+            padding: 2px 6px;
+            margin-left: 3px;
+            cursor: pointer;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+        .controls button:hover {
+            background: #3367d6;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .dialog-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 350px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .dialog-box h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .dialog-box input {
+            width: calc(100% - 16px);
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .dialog-box button {
+            padding: 8px 15px;
+            margin-top: 10px;
+            margin-right: 5px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .dialog-box button:hover {
+            background: #3367d6;
+        }
+        .dialog-box button.cancel {
+            background: #f44336;
+        }
+        .dialog-box button.cancel:hover {
+            background: #d32f2f;
+        }
+        #iframe-count-input {
+            width: 100px;
+            padding: 8px;
+            margin: 10px auto;
+            display: block;
+            font-size: 18px;
+            text-align: center;
+        }
+        /* Grid layout preview styles */
+        .grid-preview-container {
+            margin: 15px auto;
+            width: 200px;
+            height: 120px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            position: relative;
+        }
+        .grid-preview {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-gap: 2px;
+            padding: 2px;
+            box-sizing: border-box;
+        }
+        .grid-cell {
+            background: #4285f4;
+            border-radius: 2px;
+        }
+        .layout-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .layout-controls button {
+            padding: 5px 10px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        .layout-controls span {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0 10px;
+        }
+        .settings-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .settings-row label {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="iframe-grid">
+        <!-- Iframes will be generated here -->
+    </div>
+
+    <!-- Number of Iframes Prompt -->
+    <div class="overlay" id="iframe-count-overlay" style="display: flex;">
+        <div class="dialog-box">
+            <h3>Grid Settings</h3>
+            
+            <div class="settings-row">
+                <label for="iframe-count-input">Number of windows:</label>
+                <input type="number" id="iframe-count-input" min="1" max="36" value="6">
+            </div>
+            
+            <div class="layout-controls">
+                <button id="prev-layout-btn">◀</button>
+                <span id="layout-display">2×3</span>
+                <button id="next-layout-btn">▶</button>
+            </div>
+            
+            <div class="grid-preview-container">
+                <div class="grid-preview" id="grid-preview"></div>
+            </div>
+            
+            <div>
+                <button id="confirm-count-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PIN Setup Overlay -->
+    <div class="overlay" id="setup-overlay" style="display: none;">
+        <div class="dialog-box">
+            <h3>Set PIN for Window <span id="setup-window-id"></span></h3>
+            <p>Enter a 4-digit PIN to encrypt your saved data:</p>
+            <input type="password" id="pin-input" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="Enter 4-digit PIN">
+            <div>
+                <button id="save-pin-btn">Save PIN</button>
+                <button id="cancel-setup-btn" class="cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Save Overlay -->
+    <div class="overlay" id="save-overlay" style="display: none;">
+        <div class="dialog-box">
+            <h3>Save Data for Window <span id="save-window-id"></span></h3>
+            <p>Enter your PIN to save the current form data:</p>
+            <input type="password" id="save-pin-input" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="Enter 4-digit PIN">
+            <div>
+                <button id="confirm-save-btn">Save Data</button>
+                <button id="cancel-save-btn" class="cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Data Overlay -->
+    <div class="overlay" id="load-overlay" style="display: none;">
+        <div class="dialog-box">
+            <h3>Load Data for Window <span id="load-window-id"></span></h3>
+            <p>Enter your PIN to load saved data:</p>
+            <input type="password" id="load-pin-input" maxlength="4" pattern="[0-9]*" inputmode="numeric" placeholder="Enter 4-digit PIN">
+            <div>
+                <button id="confirm-load-btn">Load Data</button>
+                <button id="cancel-load-btn" class="cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let TOTAL_WINDOWS = 6; // Default, will be updated by user input
+        const MAX_WINDOWS = 36;
+        const MIN_WINDOWS = 1;
+        const TARGET_URL = 'https://highspell.com';
+        
+        // Grid layout configuration
+        let currentLayoutIndex = 0;
+        let availableLayouts = [];
+
+        // Storage keys
+        const PIN_KEY_PREFIX = 'highspell_pin_';
+        const DATA_KEY_PREFIX = 'highspell_data_';
+
+        // Current state variables
+        let currentWindowId = null;
+        let currentAction = null;
+        let controlsVisible = false;
+
+        // Content caching
+        let cachedContent = null;
+
+        // Initialize app when document is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            setupMessageListeners();
+            
+            // Initialize grid layout options and preview
+            updateAvailableLayouts(TOTAL_WINDOWS);
+            updateLayoutPreview();
+        });
+
+        // Fetch the target URL content once
+        function fetchTargetContent() {
+            // Remove any existing loading indicators
+            const existingIndicator = document.getElementById('loading-indicator');
+            if (existingIndicator) {
+                existingIndicator.remove();
+            }
+            
+            // Show loading indicator in the interface
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.id = 'loading-indicator';
+            loadingIndicator.style = 'position: absolute; top: 20px; left: 20px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);';
+            loadingIndicator.innerHTML = `<p>Preparing iframes...</p>`;
+            document.body.appendChild(loadingIndicator);
+            
+            // Skip content fetching and use direct iframe loading instead
+            setTimeout(() => {
+                // Create iframes using direct URL approach
+                cachedContent = null;
+                createIframes();
+                
+                // Remove loading indicator
+                loadingIndicator.remove();
+            }, 500);
+        }
+
+        // Create iframes based on user-selected count and layout
+        function createIframes() {
+            const container = document.getElementById('iframe-grid');
+            container.innerHTML = ''; // Clear any existing content
+            
+            // Apply the selected grid layout
+            const layout = availableLayouts[currentLayoutIndex];
+            container.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
+            container.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+            
+            for (let i = 1; i <= TOTAL_WINDOWS; i++) {
+                const iframeContainer = document.createElement('div');
+                iframeContainer.className = 'iframe-container';
+                iframeContainer.setAttribute('data-id', i);
+                
+                // Use direct URL loading for all iframes
+                const iframeContent = `
+                    <iframe src="${TARGET_URL}" id="iframe-${i}" title="Highspell Window ${i}"></iframe>
+                `;
+                
+                iframeContainer.innerHTML = `
+                    ${iframeContent}
+                    <div class="controls" id="controls-${i}">
+                        <div>
+                            <button class="setup-btn" data-id="${i}">Setup PIN</button>
+                            <button class="save-btn" data-id="${i}">Save Data</button>
+                            <button class="load-btn" data-id="${i}">Load Data</button>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(iframeContainer);
+            }
+        }
+
+        // Helper function to escape HTML for srcdoc attribute
+        function escapeHtml(html) {
+            // Create a temporary div element
+            const temp = document.createElement('div');
+            temp.textContent = html;
+            
+            // Get the escaped HTML as a string
+            let escaped = temp.innerHTML;
+            
+            // Additional escaping for quotes in srcdoc attribute
+            escaped = escaped.replace(/"/g, '&quot;');
+            
+            return escaped;
+        }
+
+        // Process user input for iframe count and layout
+        function confirmIframeCount() {
+            const countInput = document.getElementById('iframe-count-input');
+            let count = parseInt(countInput.value);
+            
+            // Validate input
+            if (isNaN(count) || count < MIN_WINDOWS) {
+                count = MIN_WINDOWS;
+            } else if (count > MAX_WINDOWS) {
+                count = MAX_WINDOWS;
+            }
+            
+            TOTAL_WINDOWS = count;
+            hideOverlay('iframe-count-overlay');
+            
+            // Create iframes directly
+            fetchTargetContent();
+        }
+
+        // Set up all event listeners
+        function setupEventListeners() {
+            // Add iframe count confirmation button listener
+            document.getElementById('confirm-count-btn').addEventListener('click', confirmIframeCount);
+            
+            // Also allow Enter key to confirm
+            document.getElementById('iframe-count-input').addEventListener('keyup', function(e) {
+                if (e.key === 'Enter') {
+                    confirmIframeCount();
+                }
+            });
+            
+            // Add event listeners for layout controls
+            document.getElementById('prev-layout-btn').addEventListener('click', function() {
+                if (currentLayoutIndex > 0) {
+                    currentLayoutIndex--;
+                    updateLayoutPreview();
+                }
+            });
+            
+            document.getElementById('next-layout-btn').addEventListener('click', function() {
+                if (currentLayoutIndex < availableLayouts.length - 1) {
+                    currentLayoutIndex++;
+                    updateLayoutPreview();
+                }
+            });
+            
+            // Add event listener for window count changes
+            document.getElementById('iframe-count-input').addEventListener('change', function() {
+                const count = parseInt(this.value);
+                if (!isNaN(count) && count >= MIN_WINDOWS && count <= MAX_WINDOWS) {
+                    TOTAL_WINDOWS = count;
+                    updateAvailableLayouts(count);
+                    updateLayoutPreview();
+                }
+            });
+
+            // Setup PIN buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('setup-btn')) {
+                    const windowId = e.target.getAttribute('data-id');
+                    showSetupOverlay(windowId);
+                } else if (e.target.classList.contains('save-btn')) {
+                    const windowId = e.target.getAttribute('data-id');
+                    showSaveOverlay(windowId);
+                } else if (e.target.classList.contains('load-btn')) {
+                    const windowId = e.target.getAttribute('data-id');
+                    showLoadOverlay(windowId);
+                }
+            });
+
+            // Setup overlay action buttons
+            document.getElementById('save-pin-btn').addEventListener('click', savePIN);
+            document.getElementById('cancel-setup-btn').addEventListener('click', () => hideOverlay('setup-overlay'));
+            
+            document.getElementById('confirm-save-btn').addEventListener('click', saveData);
+            document.getElementById('cancel-save-btn').addEventListener('click', () => hideOverlay('save-overlay'));
+            
+            document.getElementById('confirm-load-btn').addEventListener('click', loadData);
+            document.getElementById('cancel-load-btn').addEventListener('click', () => hideOverlay('load-overlay'));
+            
+            // Add tilde key listener to toggle controls
+            document.addEventListener('keydown', function(e) {
+                // Tilde key (backtick/grave accent) - keyCode 192
+                if (e.keyCode === 192 || e.key === '`' || e.key === '~') {
+                    toggleControls();
+                }
+            });
+        }
+        
+        // Toggle visibility of all control panels
+        function toggleControls() {
+            controlsVisible = !controlsVisible;
+            const controls = document.querySelectorAll('.controls');
+            controls.forEach(control => {
+                control.style.display = controlsVisible ? 'flex' : 'none';
+            });
+        }
+
+        // Set up postMessage listeners for iframe communication
+        function setupMessageListeners() {
+            window.addEventListener('message', function(event) {
+                // In a real implementation, we would verify origin matches TARGET_URL
+                // and handle the messages from the iframes
+                
+                if (event.data && event.data.type === 'FORM_DATA' && currentAction === 'save') {
+                    // This would handle form data sent from iframe for saving
+                    const formData = event.data.formData;
+                    saveFormData(currentWindowId, formData);
+                }
+            });
+        }
+
+        // Show setup PIN overlay
+        function showSetupOverlay(windowId) {
+            currentWindowId = windowId;
+            document.getElementById('setup-window-id').textContent = windowId;
+            document.getElementById('pin-input').value = '';
+            document.getElementById('setup-overlay').style.display = 'flex';
+        }
+
+        // Show save data overlay
+        function showSaveOverlay(windowId) {
+            currentWindowId = windowId;
+            currentAction = 'save';
+            
+            // Check if PIN exists
+            if (!localStorage.getItem(PIN_KEY_PREFIX + windowId)) {
+                alert('Please set up a PIN for this window first');
+                showSetupOverlay(windowId);
+                return;
+            }
+            
+            document.getElementById('save-window-id').textContent = windowId;
+            document.getElementById('save-pin-input').value = '';
+            document.getElementById('save-overlay').style.display = 'flex';
+        }
+
+        // Show load data overlay
+        function showLoadOverlay(windowId) {
+            currentWindowId = windowId;
+            currentAction = 'load';
+            
+            // Check if PIN and data exist
+            if (!localStorage.getItem(PIN_KEY_PREFIX + windowId)) {
+                alert('No PIN set for this window');
+                return;
+            }
+            
+            if (!localStorage.getItem(DATA_KEY_PREFIX + windowId)) {
+                alert('No saved data for this window');
+                return;
+            }
+            
+            document.getElementById('load-window-id').textContent = windowId;
+            document.getElementById('load-pin-input').value = '';
+            document.getElementById('load-overlay').style.display = 'flex';
+        }
+
+        // Hide any overlay
+        function hideOverlay(overlayId) {
+            document.getElementById(overlayId).style.display = 'none';
+        }
+
+        // Save PIN
+        function savePIN() {
+            const pin = document.getElementById('pin-input').value;
+            
+            if (pin.length !== 4 || isNaN(pin)) {
+                alert('Please enter a valid 4-digit PIN');
+                return;
+            }
+            
+            // Hash the PIN for storage
+            const hashedPin = CryptoJS.SHA256(pin).toString();
+            localStorage.setItem(PIN_KEY_PREFIX + currentWindowId, hashedPin);
+            
+            hideOverlay('setup-overlay');
+            alert(`PIN successfully set for Window ${currentWindowId}`);
+        }
+
+        // Save form data
+        function saveData() {
+            const pin = document.getElementById('save-pin-input').value;
+            
+            if (pin.length !== 4 || isNaN(pin)) {
+                alert('Please enter a valid 4-digit PIN');
+                return;
+            }
+            
+            // Verify PIN
+            const hashedPin = CryptoJS.SHA256(pin).toString();
+            const storedHashedPin = localStorage.getItem(PIN_KEY_PREFIX + currentWindowId);
+            
+            if (hashedPin !== storedHashedPin) {
+                alert('Incorrect PIN');
+                return;
+            }
+            
+            // Request form data from the iframe
+            try {
+                const iframe = document.getElementById(`iframe-${currentWindowId}`);
+                
+                // In a real integration, the iframe would respond to this message
+                // by sending back all form data
+                iframe.contentWindow.postMessage({
+                    type: 'GET_FORM_DATA',
+                    windowId: currentWindowId
+                }, TARGET_URL);
+                
+                // For demonstration, create mock data since we can't access cross-origin iframe content
+                const mockFormData = {
+                    username: `user${currentWindowId}`,
+                    password: `pass${currentWindowId}`,
+                    settings: { theme: 'light', fontSize: 'medium' },
+                    timestamp: new Date().toISOString()
+                };
+                
+                // Encrypt and save the data
+                saveFormData(currentWindowId, mockFormData, pin);
+                
+            } catch (error) {
+                console.error('Error saving data:', error);
+                alert('Error saving data');
+            }
+        }
+
+        // Encrypt and save form data
+        function saveFormData(windowId, formData, pin) {
+            try {
+                // Encrypt the data using the PIN
+                const encrypted = CryptoJS.AES.encrypt(JSON.stringify(formData), pin).toString();
+                
+                // Save the encrypted data
+                localStorage.setItem(DATA_KEY_PREFIX + windowId, encrypted);
+                
+                hideOverlay('save-overlay');
+                alert(`Data saved successfully for Window ${windowId}`);
+            } catch (error) {
+                console.error('Encryption error:', error);
+                alert('Error encrypting data');
+            }
+        }
+
+        // Load saved data
+        function loadData() {
+            const pin = document.getElementById('load-pin-input').value;
+            
+            if (pin.length !== 4 || isNaN(pin)) {
+                alert('Please enter a valid 4-digit PIN');
+                return;
+            }
+            
+            // Verify PIN
+            const hashedPin = CryptoJS.SHA256(pin).toString();
+            const storedHashedPin = localStorage.getItem(PIN_KEY_PREFIX + currentWindowId);
+            
+            if (hashedPin !== storedHashedPin) {
+                alert('Incorrect PIN');
+                return;
+            }
+            
+            try {
+                // Get the encrypted data
+                const encrypted = localStorage.getItem(DATA_KEY_PREFIX + currentWindowId);
+                
+                // Decrypt the data
+                const decrypted = CryptoJS.AES.decrypt(encrypted, pin);
+                const dataString = decrypted.toString(CryptoJS.enc.Utf8);
+                
+                if (!dataString) {
+                    throw new Error('Decryption failed');
+                }
+                
+                const formData = JSON.parse(dataString);
+                
+                // Send the data to the iframe
+                const iframe = document.getElementById(`iframe-${currentWindowId}`);
+                iframe.contentWindow.postMessage({
+                    type: 'LOAD_FORM_DATA',
+                    formData: formData
+                }, TARGET_URL);
+                
+                hideOverlay('load-overlay');
+                alert(`Data loaded successfully for Window ${currentWindowId}`);
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Error decrypting data. Incorrect PIN or corrupted data.');
+            }
+        }
+
+        // Calculate all valid grid layouts for a given number of windows
+        function updateAvailableLayouts(windowCount) {
+            availableLayouts = [];
+            
+            // Find all factors of windowCount to create possible layouts
+            for (let i = 1; i <= windowCount; i++) {
+                if (windowCount % i === 0) {
+                    // Add both orientations (columns × rows)
+                    availableLayouts.push({
+                        columns: i,
+                        rows: windowCount / i
+                    });
+                    
+                    // Don't add duplicate layouts (e.g., 2×3 and 3×2 for 6 windows)
+                    if (i !== windowCount / i) {
+                        availableLayouts.push({
+                            columns: windowCount / i,
+                            rows: i
+                        });
+                    }
+                }
+            }
+            
+            // Sort layouts by columns (ascending)
+            availableLayouts.sort((a, b) => a.columns - b.columns);
+            
+            // Reset current layout index to a sensible default
+            // Pick a layout close to square (middle of the array)
+            currentLayoutIndex = Math.floor(availableLayouts.length / 2);
+        }
+
+        // Update the visual preview of the grid layout
+        function updateLayoutPreview() {
+            if (availableLayouts.length === 0) return;
+            
+            const layout = availableLayouts[currentLayoutIndex];
+            const preview = document.getElementById('grid-preview');
+            const layoutDisplay = document.getElementById('layout-display');
+            
+            // Update the layout text display
+            layoutDisplay.textContent = `${layout.columns}×${layout.rows}`;
+            
+            // Configure the preview grid
+            preview.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
+            preview.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+            
+            // Clear existing preview cells
+            preview.innerHTML = '';
+            
+            // Create cells for preview
+            for (let i = 0; i < TOTAL_WINDOWS; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                preview.appendChild(cell);
+            }
+        }
+    </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
